@@ -1,0 +1,97 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florent « fls » Sautour et Sébastien Tharaud, Campus Beaupeyrat
+#
+# ap03/verifier : fait le point sur l'atelier « Le serveur du lycée » (Mon premier serveur distant).
+#   sudo ./verifier      toutes les missions
+#   sudo ./verifier 3    la mission 3 seulement
+# Ne modifie rien sur la machine. Les codes du rapport sont vérifiés par empreinte (sha256).
+. "$(dirname "$(readlink -f "$0")")/../lib/verifier.sh"
+need_root
+
+ONLY="${1:-}"
+case "$ONLY" in ""|[1-6]) ;; *) echo "Usage : sudo ./verifier [1-6]"; exit 2 ;; esac
+U="${SUDO_USER:-$(logname 2>/dev/null)}"
+H="$(getent passwd "$U" | cut -d: -f6)"
+R="$H/rapport-ap03.txt"
+val() { grep -m1 "^$1=" "$R" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]'; }
+sql() { mariadb -NBe "$1" 2>/dev/null; }
+run() { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
+
+title "Le serveur du lycée · ap03 · compte $U"
+
+if run 1; then
+  mission "Mission 1 : prendre la main"
+  check "session SSH ouverte avec ton compte" sh -c "journalctl -u ssh -u sshd --no-pager -o cat | grep -q 'Accepted [a-z-]* for $U '"
+  hint "connecte-toi depuis ton poste : ssh $U@<IP de ta VM>"
+  check "liste des paquets à jour" sh -c "find /var/lib/apt/lists -maxdepth 1 -name '*InRelease' -mmin -2880 | grep -q ."
+  hint "sudo apt update"
+  check "rapport : ip_vm" sh -c "hostname -I | tr ' ' '\n' | grep -qx '$(val ip_vm)' && [ -n '$(val ip_vm)' ]"
+  hint "ligne ip_vm=… dans ~/rapport-ap03.txt (l'adresse de hostname -I)"
+fi
+
+if run 2; then
+  mission "Mission 2 : le serveur web"
+  check "apache2 est installé" sh -c "dpkg -s apache2 2>/dev/null | grep -q '^Status: install ok installed'"
+  hint "sudo apt install apache2"
+  check "apache2 : active et enabled" sh -c "[ \"\$(systemctl is-active apache2)\" = active ] && [ \"\$(systemctl is-enabled apache2)\" = enabled ]"
+  check "ta page contient ton identifiant ($U)" sh -c "curl -fsS --max-time 5 http://127.0.0.1/ | grep -q '$U'"
+  hint "écris ton identifiant dans /var/www/html/index.html"
+  check "index.html : propriétaire $U, groupe www-data" sh -c "[ \"\$(stat -c %U:%G /var/www/html/index.html)\" = '$U:www-data' ]"
+  hint "sudo chown -R $U:www-data /var/www/html"
+  check "Apache (www-data) peut lire ta page" sudo -u www-data test -r /var/www/html/index.html
+  hint "chmod 644 /var/www/html/index.html"
+  check "ta page a été visitée depuis le réseau" sh -c "cat /var/log/apache2/access.log* 2>/dev/null | grep -qvE '^(127\.0\.0\.1|::1) '"
+  hint "ouvre http://<IP de ta VM>/ dans le navigateur de ton poste"
+  check "rapport : compte_web" answer "$(val compte_web)" 81f4496c4a42bf27c5c0c294d6b3d6fdac57b09b451c7626fe9f0f4a8421cdfe
+  hint "sous quel compte tournent les processus Apache ?"
+fi
+
+if run 3; then
+  mission "Mission 3 : le serveur de bases"
+  check "mariadb-server est installé" sh -c "dpkg -s mariadb-server 2>/dev/null | grep -q '^Status: install ok installed'"
+  hint "sudo apt install mariadb-server"
+  check "mariadb est actif" sh -c "[ \"\$(systemctl is-active mariadb)\" = active ]"
+  check "plus de compte anonyme" sh -c "[ \"\$(mariadb -NBe \"SELECT COUNT(*) FROM mysql.user WHERE user=''\")\" = 0 ]"
+  hint "sudo mariadb-secure-installation"
+  check "plus de base test" sh -c "systemctl is-active -q mariadb && [ -z \"\$(mariadb -NBe \"SHOW DATABASES LIKE 'test'\")\" ]"
+  check "root seulement en local" sh -c "[ \"\$(mariadb -NBe \"SELECT COUNT(*) FROM mysql.user WHERE user='root' AND host NOT IN ('localhost','127.0.0.1','::1')\")\" = 0 ]"
+  check "rapport : port_bdd" answer "$(val port_bdd)" 757db91a80964d58a2b0d26bffd641bcbe142aae4f7f4771233619fa53fc179c
+  hint "sur quel port écoute MariaDB ? (sudo ss -tlnp)"
+fi
+
+if run 4; then
+  mission "Mission 4 : des mots de passe solides"
+  check "simple_password_check est actif" sh -c "[ \"\$(mariadb -NBe \"SELECT PLUGIN_STATUS FROM information_schema.PLUGINS WHERE PLUGIN_NAME='simple_password_check'\")\" = ACTIVE ]"
+  hint "fichier /etc/mysql/mariadb.conf.d/60-password.cnf, puis sudo systemctl restart mariadb"
+  check "chargé par la configuration (survit au redémarrage)" sh -c "grep -rqsE '^\s*plugin[_-]load[_-]add\s*=.*simple_password_check' /etc/mysql/"
+  check "longueur minimale : 12 caractères ou plus" sh -c "[ \"\$(mariadb -NBe 'SELECT @@simple_password_check_minimal_length')\" -ge 12 ]"
+  check "rapport : code_faible" answer "$(val code_faible)" 99cf15ac55d54e0c14d9bd363e3037ab63daebbc68b836ea162fcd22f86c4545
+  hint "le numéro de l'erreur affichée pour le mot de passe azerty"
+fi
+
+if run 5; then
+  mission "Mission 5 : bases et comptes en SQL"
+  check "la base lycee existe" sh -c "[ -n \"\$(mariadb -NBe \"SHOW DATABASES LIKE 'lycee'\")\" ]"
+  check "la table eleve compte au moins 5 élèves" sh -c "[ \"\$(mariadb -NBe 'SELECT COUNT(*) FROM lycee.eleve')\" -ge 5 ]"
+  hint "ajoute des élèves : INSERT INTO eleve (nom, classe) VALUES (…);"
+  check "le compte admin_lycee@localhost existe" sh -c "[ \"\$(mariadb -NBe \"SELECT COUNT(*) FROM mysql.user WHERE user='admin_lycee' AND host='localhost'\")\" = 1 ]"
+  check "admin_lycee a tous les droits sur lycee.*" sh -c "mariadb -NBe \"SHOW GRANTS FOR 'admin_lycee'@'localhost'\" | grep -q 'GRANT ALL PRIVILEGES ON \`lycee\`.\*'"
+  check "admin_lycee n'a aucun autre droit" sh -c "mariadb -NBe \"SHOW GRANTS FOR 'admin_lycee'@'localhost'\" >/dev/null && [ \"\$(mariadb -NBe \"SHOW GRANTS FOR 'admin_lycee'@'localhost'\" | grep -vc 'USAGE ON \*\.\*\|ON \`lycee\`\.\*')\" = 0 ]"
+  hint "un compte, une base : GRANT … ON lycee.* seulement"
+fi
+
+if run 6; then
+  mission "Mission 6 : phpMyAdmin"
+  check "phpMyAdmin est installé" sh -c "dpkg -s phpmyadmin 2>/dev/null | grep -q '^Status: install ok installed'"
+  hint "sudo apt install phpmyadmin (coche apache2 avec Espace)"
+  check "phpMyAdmin répond sur /phpmyadmin/" sh -c "curl -fsS --max-time 5 http://127.0.0.1/phpmyadmin/ | grep -qi phpmyadmin"
+  hint "l'installeur n'a pas configuré Apache : sudo dpkg-reconfigure phpmyadmin"
+  check "le compte dba peut tout administrer" sh -c "mariadb -NBe \"SHOW GRANTS FOR 'dba'@'localhost'\" | grep -q 'ALL PRIVILEGES ON \*\.\*.*WITH GRANT OPTION'"
+  check "la base cdi existe" sh -c "[ -n \"\$(mariadb -NBe \"SHOW DATABASES LIKE 'cdi'\")\" ]"
+  check "admin_cdi a des droits sur cdi" sh -c "mariadb -NBe \"SHOW GRANTS FOR 'admin_cdi'@'localhost'\" | grep -q 'ON \`cdi\`\.\*'"
+  hint "dans phpMyAdmin : Comptes d'utilisateurs › admin_cdi › Modifier les privilèges › Base de données"
+fi
+
+if [ -n "$ONLY" ]; then finish "Mission $ONLY validée : passe à la suivante."; fi
+finish "Toutes les missions sont validées : exit 0. Appelle le professeur."

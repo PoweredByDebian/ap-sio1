@@ -51,7 +51,7 @@ answer() {
 
 finish() {
   echo
-  echo "  ${_B}→ $_score/$_total${_N}"
+  echo "  ${_B}Bilan $_score/$_total${_N}"
   if [ "$_score" -eq "$_total" ]; then
     echo; echo "${_G}$1${_N}"; exit 0
   fi
