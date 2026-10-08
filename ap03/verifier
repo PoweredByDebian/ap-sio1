@@ -1,6 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-3.0-or-later
-# Copyright (C) 2026 Florent « fls » Sautour et Sébastien Tharaud, Campus Beaupeyrat
+# Copyright (C) 2026 Florent « fls » Sautour et Sébastien « sebthar » Tharaud, Campus Beaupeyrat
 #
 # ap03/verifier : fait le point sur l'atelier « Le serveur du lycée » (Mon premier serveur distant).
 #   sudo ./verifier      toutes les missions
@@ -37,8 +37,10 @@ if run 2; then
   check "apache2 : active et enabled" sh -c "[ \"\$(systemctl is-active apache2)\" = active ] && [ \"\$(systemctl is-enabled apache2)\" = enabled ]"
   check "ta page contient ton identifiant ($U)" sh -c "curl -fsS --max-time 5 http://127.0.0.1/ | grep -q '$U'"
   hint "écris ton identifiant dans /var/www/html/index.html"
-  check "index.html : propriétaire $U, groupe www-data" sh -c "[ \"\$(stat -c %U:%G /var/www/html/index.html)\" = '$U:www-data' ]"
-  hint "sudo chown -R $U:www-data /var/www/html"
+  check "/var/www/html : propriétaire $U, droits rwxr-xr-x" sh -c "[ \"\$(stat -c %U:%a /var/www/html)\" = '$U:755' ]"
+  hint "le dossier doit être à ton compte : tous les droits pour toi, lecture et exécution pour les autres"
+  check "index.html : c'est ta page (propriétaire $U)" sh -c "[ \"\$(stat -c %U /var/www/html/index.html)\" = '$U' ]"
+  hint "sudo rm /var/www/html/index.html, puis crée ta page avec nano, sans sudo"
   check "Apache (www-data) peut lire ta page" sudo -u www-data test -r /var/www/html/index.html
   hint "chmod 644 /var/www/html/index.html"
   check "ta page a été visitée depuis le réseau" sh -c "cat /var/log/apache2/access.log* 2>/dev/null | grep -qvE '^(127\.0\.0\.1|::1) '"
@@ -85,12 +87,14 @@ if run 6; then
   mission "Mission 6 : phpMyAdmin"
   check "phpMyAdmin est installé" sh -c "dpkg -s phpmyadmin 2>/dev/null | grep -q '^Status: install ok installed'"
   hint "sudo apt install phpmyadmin (coche apache2 avec Espace)"
-  check "phpMyAdmin répond sur /phpmyadmin/" sh -c "curl -fsS --max-time 5 http://127.0.0.1/phpmyadmin/ | grep -qi phpmyadmin"
+  check "Apache exécute PHP" sh -c "apache2ctl -M 2>/dev/null | grep -q php"
+  hint "sudo apt install php libapache2-mod-php php-mysql, puis sudo systemctl restart apache2"
+  check "phpMyAdmin répond sur /phpmyadmin/" sh -c "curl -fsS --max-time 5 http://127.0.0.1/phpmyadmin/ | grep -qi phpmyadmin && ! curl -fsS --max-time 5 http://127.0.0.1/phpmyadmin/ | grep -q '<?php'"
   hint "l'installeur n'a pas configuré Apache : sudo dpkg-reconfigure phpmyadmin"
   check "le compte dba peut tout administrer" sh -c "mariadb -NBe \"SHOW GRANTS FOR 'dba'@'localhost'\" | grep -q 'ALL PRIVILEGES ON \*\.\*.*WITH GRANT OPTION'"
   check "la base cdi existe" sh -c "[ -n \"\$(mariadb -NBe \"SHOW DATABASES LIKE 'cdi'\")\" ]"
   check "admin_cdi a des droits sur cdi" sh -c "mariadb -NBe \"SHOW GRANTS FOR 'admin_cdi'@'localhost'\" | grep -q 'ON \`cdi\`\.\*'"
-  hint "dans phpMyAdmin : Comptes d'utilisateurs › admin_cdi › Modifier les privilèges › Base de données"
+  hint "dans phpMyAdmin : Privilèges (Comptes d'utilisateurs) › admin_cdi › Modifier les privilèges › Base de données"
 fi
 
 if [ -n "$ONLY" ]; then finish "Mission $ONLY validée : passe à la suivante."; fi
