@@ -7,11 +7,11 @@ Chaque fichier a un **propriétaire**, un **groupe**, et des droits pour trois c
 ===== Lire les droits =====
 
 <code>
-$ ls -l /var/www/html/bonjour.php
--rw-r--r-- 1 alice alice 180 oct. 13 10:02 bonjour.php
+$ ls -l /var/www/html/index.html
+-rw-r--r-- 1 alice alice 180 oct. 13 10:02 index.html
 </code>
 
-^ Bloc ^ Pour qui ^ Sur bonjour.php ^
+^ Bloc ^ Pour qui ^ Sur index.html ^
 | ''-'' | le type : ''-'' fichier, ''d'' dossier | un fichier |
 | ''rw-'' | **u** : le propriétaire (''alice'') | lire, écrire |
 | ''r--'' | **g** : le groupe (''alice'') | lire |

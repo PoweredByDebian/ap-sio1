@@ -5,12 +5,12 @@
 # ap04/check : fait le point sur l'atelier « Le Livre rouge » (Une appli web en PHP, DokuWiki).
 #   sudo ./check       toutes les missions
 #   sudo ./check 4     la mission 4 seulement
-# Ne modifie rien sur la machine. Les codes du rapport sont vérifiés par empreinte (sha256).
+# Ne modifie rien sur la machine.
 . "$(dirname "$(readlink -f "$0")")/../lib/check.sh"
 need_root
 
 ONLY="${1:-}"
-case "$ONLY" in ""|[1-9]|10) ;; *) echo "Usage : sudo ./check [1-10]"; exit 2 ;; esac
+case "$ONLY" in ""|[1-9]) ;; *) echo "Usage : sudo ./check [1-9]"; exit 2 ;; esac
 U="${SUDO_USER:-$(logname 2>/dev/null)}"
 H="$(getent passwd "$U" | cut -d: -f6)"
 R="$H/rapport-ap04.txt"
@@ -37,20 +37,7 @@ if run 1; then
 fi
 
 if run 2; then
-  mission "Mission 2 : mon premier PHP"
-  check "bonjour.php existe et t'appartient" owner /var/www/html/bonjour.php "$U"
-  hint "nano /var/www/html/bonjour.php, sans sudo"
-  check "bonjour.php utilise une variable, echo et date()" sh -c "grep -q '\\\$[A-Za-z_]' /var/www/html/bonjour.php && grep -q echo /var/www/html/bonjour.php && grep -q 'date(' /var/www/html/bonjour.php"
-  check "la page est fabriquée : aucun PHP n'arrive au navigateur" sh -c "out=\$(curl -fsS --max-time 5 http://127.0.0.1/bonjour.php) && echo \"\$out\" | grep -qi '<h1' && ! echo \"\$out\" | grep -q '<?php'"
-  hint "si tu vois <?php : Apache n'exécute pas PHP ; sinon relis ta page ligne par ligne"
-  check "bonjour.php a été visitée depuis le réseau" sh -c "cat /var/log/apache2/access.log* 2>/dev/null | grep -vE '^(127\.0\.0\.1|::1) ' | grep -q 'GET /bonjour.php'"
-  hint "ouvre http://<IP de ta VM>/bonjour.php dans le navigateur de ton poste"
-  check "rapport : version_php" sh -c "[ -n '$(val version_php)' ] && [ '$(val version_php)' = \"\$(php -r 'echo PHP_MAJOR_VERSION.\".\".PHP_MINOR_VERSION;')\" ]"
-  hint "les deux premiers nombres de php -v"
-fi
-
-if run 3; then
-  mission "Mission 3 : récupérer DokuWiki"
+  mission "Mission 2 : récupérer DokuWiki"
   check "extensions PHP : xml, mbstring, intl, gd" sh -c "m=\$(php -m) && for e in xml mbstring intl gd; do echo \"\$m\" | grep -qx \$e || exit 1; done"
   hint "sudo apt install php-xml php-mbstring php-intl php-gd, puis sudo systemctl restart apache2"
   check "DokuWiki est rangé dans $D" test -f "$D/doku.php"
@@ -65,8 +52,8 @@ if run 3; then
   hint "la date affichée par cat dokuwiki-*/VERSION (ex. 2026-07-14c)"
 fi
 
-if run 4; then
-  mission "Mission 4 : la porte d'Apache"
+if run 3; then
+  mission "Mission 3 : la porte d'Apache"
   check "configuration journal activée" test -e /etc/apache2/conf-enabled/journal.conf
   hint "sudo a2enconf journal, puis sudo systemctl reload apache2"
   check "Alias /journal vers $D" grep -qiE "^[[:space:]]*Alias[[:space:]]+/journal/?[[:space:]]+\"?$D/?\"?[[:space:]]*$" /etc/apache2/conf-available/journal.conf
@@ -75,13 +62,10 @@ if run 4; then
   check "le wiki répond sur /journal/" sh -c "c=\$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' http://127.0.0.1/journal/doku.php); [ \"\$c\" != 404 ] && [ \"\$c\" != 000 ]"
   check "data/ et conf/ sont fermés au navigateur (403)" sh -c "[ \"\$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' http://127.0.0.1/journal/data/pages/wiki/dokuwiki.txt)\" = 403 ] && [ \"\$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' http://127.0.0.1/journal/conf/dokuwiki.php)\" = 403 ]"
   hint "AllowOverride All dans le bloc <Directory $D>, puis reload"
-  check "rapport : code_avant" answer "$(val code_avant)" 27badc983df1780b60c2b3fa9d3a19a00e46aac798451f0febdca52920faaddf
-  hint "le code obtenu AVANT d'ajouter AllowOverride"
-  check "rapport : code_apres" answer "$(val code_apres)" d26eae87829adde551bf4b852f9da6b8c3c2db9b65b8b68870632a2db5f53e00
 fi
 
-if run 5; then
-  mission "Mission 5 : l'installeur"
+if run 4; then
+  mission "Mission 4 : l'installeur"
   check "le wiki est installé (conf/local.php)" test -f "$D/conf/local.php"
   hint "http://<IP de ta VM>/journal/install.php"
   check "install.php est supprimé" sh -c "[ ! -e $D/install.php ] && [ \"\$(curl -s -o /dev/null --max-time 5 -w '%{http_code}' http://127.0.0.1/journal/install.php)\" = 404 ]"
@@ -94,8 +78,8 @@ if run 5; then
   hint "Admin › Configuration Settings › disableactions : coche « Register »"
 fi
 
-if run 6; then
-  mission "Mission 6 : le look"
+if run 5; then
+  mission "Mission 5 : le look"
   check "template bootstrap3 installé" test -d "$D/lib/tpl/bootstrap3"
   hint "Admin › Extension Manager › Search and Install"
   check "template bootstrap3 activé" conf template bootstrap3
@@ -108,8 +92,8 @@ if run 6; then
   hint "Admin › Configuration Settings › defer_js : décoche, puis Save"
 fi
 
-if run 7; then
-  mission "Mission 7 : mon Livre rouge"
+if run 6; then
+  mission "Mission 6 : mon Livre rouge"
   check "accueil : Livre rouge et liens vers les régions" sh -c "grep -qi 'livre rouge' $P/start.txt && grep -q 'comte:' $P/start.txt && grep -q 'gondor:' $P/start.txt"
   hint "modifie la page start : copie pages/start.txt du dépôt, voir la fiche"
   check "la carte : indexmenu dans la sidebar" grep -q '{{indexmenu>' "$P/sidebar.txt"
@@ -126,8 +110,8 @@ if run 7; then
   hint "dans fondcombe:start, remplace bob par l'identifiant de ton binôme"
 fi
 
-if run 8; then
-  mission "Mission 8 : qui a le droit ?"
+if run 7; then
+  mission "Mission 7 : qui a le droit ?"
   check "un compte pour ton binôme, dans le groupe binome" sh -c "[ -n \"\$(awk -F: -v u='$U' '\$1 !~ /^#/ && \$1 != u && \$5 ~ /(^|,)binome(,|\$)/' $D/conf/users.auth.php)\" ]"
   hint "Admin › User Manager, Groups : user,binome"
   check "règle * @ALL : Lecture" acl '\*' '@ALL' 1
@@ -138,16 +122,16 @@ if run 8; then
   check "en visiteur : comte:droits se lit, moria:start est refusé" sh -c "l=\$(grep -m1 '[[:alnum:]]' $P/comte/droits.txt) && m=\$(grep -m1 '[[:alnum:]]' $P/moria/start.txt) && curl -fsS --max-time 5 'http://127.0.0.1/journal/doku.php?id=comte:droits&do=export_raw' | grep -qF \"\$l\" && ! curl -sS --max-time 5 'http://127.0.0.1/journal/doku.php?id=moria:start&do=export_raw' | grep -qF \"\$m\""
 fi
 
-if run 9; then
-  mission "Mission 9 : le conseil de Fondcombe"
+if run 8; then
+  mission "Mission 8 : le conseil de Fondcombe"
   check "ton binôme a écrit une page dans fondcombe: chez toi" sh -c "cat $D/data/meta/fondcombe/*.changes 2>/dev/null | awk -F'\t' -v u='$U' '\$5 != \"\" && \$5 != u' | grep -q ."
   hint "c'est ton binôme qui l'écrit, avec le compte que tu lui as créé"
   check "ta page fondcombe:$U existe chez ton binôme" sh -c "curl -fsS --max-time 5 'http://$(val ip_binome)/journal/doku.php?id=fondcombe:$U&do=export_raw' | grep -q '<callout'"
   hint "sur http://<IP de ton binôme>/journal/, page fondcombe:$U, avec au moins un <callout>"
 fi
 
-if run 10; then
-  mission "Mission 10 : sauvegarder le Livre"
+if run 9; then
+  mission "Mission 9 : sauvegarder le Livre"
   check "archive ~/livre-rouge.tgz, à ton compte" owner "$H/livre-rouge.tgz" "$U"
   hint "sudo tar czf ~/livre-rouge.tgz -C /var/www dokuwiki, puis sudo chown $U:$U ~/livre-rouge.tgz"
   check "l'archive contient tes pages" sh -c "tar tzf '$H/livre-rouge.tgz' 2>/dev/null | grep -qx 'dokuwiki/data/pages/comte/droits.txt'"
