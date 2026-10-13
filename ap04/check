@@ -111,14 +111,19 @@ fi
 if run 7; then
   mission "Mission 7 : mon Livre rouge"
   check "accueil : Livre rouge et liens vers les régions" sh -c "grep -qi 'livre rouge' $P/start.txt && grep -q 'comte:' $P/start.txt && grep -q 'gondor:' $P/start.txt"
-  hint "modifie la page start"
+  hint "modifie la page start : copie pages/start.txt du dépôt, voir la fiche"
   check "la carte : indexmenu dans la sidebar" grep -q '{{indexmenu>' "$P/sidebar.txt"
-  hint "page sidebar : {{indexmenu>:#1|js …}}, voir la fiche"
+  hint "page sidebar : copie pages/sidebar.txt du dépôt, voir la fiche"
   check "comte:droits avec Bootstrap Wrapper (callout, panneaux, onglets, alert)" sh -c "for t in callout panel tabs pane alert; do grep -q \"<\$t\" $P/comte/droits.txt || exit 1; done"
-  hint "recopie toute la page comte:droits de la fiche, balises comprises"
-  check "gondor:apache écrite avec tes mots (callout, panel, alert)" sh -c "[ \$(grep -c '[[:alnum:]]' $P/gondor/apache.txt) -ge 6 ] && grep -q '<callout' $P/gondor/apache.txt && grep -q '<panel' $P/gondor/apache.txt && grep -q '<alert' $P/gondor/apache.txt"
-  hint "au moins un <callout>, un <panel> et un <alert>, et quelques lignes de ta main"
-  check "erebor:start et moria:start existent" sh -c "[ -s $P/erebor/start.txt ] && [ -s $P/moria/start.txt ]"
+  hint "copie tout pages/comte-droits.txt du dépôt, balises comprises"
+  check "comte:droits : les onglets ont leurs deux espaces avant *" grep -qE '^  +\* \[\[#' "$P/comte/droits.txt"
+  hint "un copier-coller depuis le PDF retire les espaces en début de ligne : copie depuis le dépôt (Raw)"
+  check "gondor:apache écrite avec tes mots (callout, panel, alert)" sh -c "[ \$(grep -c '[[:alnum:]]' $P/gondor/apache.txt) -ge 6 ] && ! grep -q 'à compléter' $P/gondor/apache.txt && grep -q '<callout' $P/gondor/apache.txt && grep -q '<panel' $P/gondor/apache.txt && grep -q '<alert' $P/gondor/apache.txt"
+  hint "remplace chaque « (à compléter) » du squelette pages/gondor-apache.txt par tes mots"
+  check "erebor:start, fondcombe:start et moria:start existent" sh -c "[ -s $P/erebor/start.txt ] && [ -s $P/fondcombe/start.txt ] && [ -s $P/moria/start.txt ]"
+  hint "crée chaque page en cliquant sur son lien rouge, depuis l'accueil"
+  check "fondcombe:start : un lien vers la page de ton binôme" sh -c "grep -oE '\[\[fondcombe:[A-Za-z0-9._-]+' $P/fondcombe/start.txt | cut -d: -f2 | grep -qvxE 'start|bob|$U'"
+  hint "dans fondcombe:start, remplace bob par l'identifiant de ton binôme"
 fi
 
 if run 8; then

@@ -1,0 +1,92 @@
+====== Les droits : chmod et chown ======
+
+<callout type="info" icon="true" title="À quoi ça sert">
+Chaque fichier a un **propriétaire**, un **groupe**, et des droits pour trois catégories de comptes. On choisit qui peut le lire, le modifier ou l'exécuter.
+</callout>
+
+===== Lire les droits =====
+
+<code>
+$ ls -l /var/www/html/bonjour.php
+-rw-r--r-- 1 alice alice 180 oct. 13 10:02 bonjour.php
+</code>
+
+^ Bloc ^ Pour qui ^ Sur bonjour.php ^
+| ''-'' | le type : ''-'' fichier, ''d'' dossier | un fichier |
+| ''rw-'' | **u** : le propriétaire (''alice'') | lire, écrire |
+| ''r--'' | **g** : le groupe (''alice'') | lire |
+| ''r--'' | **o** : les autres | lire |
+
+<grid>
+<col sm="4">
+<panel type="success" title="r = 4 : lire">
+Fichier : voir le contenu. Dossier : lister.
+</panel>
+</col>
+<col sm="4">
+<panel type="warning" title="w = 2 : écrire">
+Fichier : modifier. Dossier : créer, supprimer.
+</panel>
+</col>
+<col sm="4">
+<panel type="danger" title="x = 1 : exécuter">
+Fichier : lancer. Dossier : entrer (''cd'').
+</panel>
+</col>
+</grid>
+
+===== La formule =====
+
+<tabs>
+  * [[#chmod|chmod : les droits]]
+  * [[#chown|chown : le propriétaire]]
+
+<pane id="chmod">
+<code bash>
+chmod 644 fichier       # en chiffres : rw-r--r--
+chmod u+x script.sh     # en lettres : ajoute x au propriétaire
+chmod go-w fichier      # retire w au groupe et aux autres
+chmod -R 755 dossier    # -R : le dossier et tout son contenu
+</code>
+On additionne : ''rw-'' = 4 + 2 = **6**, ''r-x'' = 4 + 1 = **5**.
+</pane>
+
+<pane id="chown">
+<code bash>
+sudo chown alice fichier          # nouveau propriétaire
+sudo chown alice:alice fichier    # propriétaire et groupe
+sudo chown -R www-data:www-data data
+</code>
+Seul ''root'' change le propriétaire d'un fichier : d'où le ''sudo''.
+</pane>
+</tabs>
+
+===== Les valeurs à connaître =====
+
+^ Valeur ^ Droits ^ Pour ^
+| ''644'' | ''rw-r--r--'' | une page web, un fichier de configuration |
+| ''755'' | ''rwxr-xr-x'' | un dossier, un script |
+| ''600'' | ''rw-------'' | un fichier secret (une clé SSH) |
+| ''700'' | ''rwx------'' | un dossier privé |
+
+===== Mes exemples =====
+
+<panel type="primary" title="ap03 : écrire dans /var/www/html sans sudo">
+<code bash>
+sudo chown -R alice:alice /var/www/html
+</code>
+Les pages sont à moi ; Apache (''www-data'') les lit grâce au ''r'' des autres.
+</panel>
+
+<panel type="primary" title="ap04 : DokuWiki n'écrit que là où il le faut">
+<code bash>
+sudo chown -R root:root /var/www/dokuwiki
+cd /var/www/dokuwiki
+sudo chown -R www-data:www-data data conf lib/plugins lib/tpl
+</code>
+Apache écrit les pages dans ''data'', mais ne peut pas modifier le code du wiki.
+</panel>
+
+<alert type="danger" icon="true">**Le piège** : ''chmod 777'' donne tout à tout le monde, même à un pirate. Quand un service ne peut pas écrire, on lui donne le dossier avec ''chown'', on n'ouvre pas les droits des autres.</alert>
+
+<label type="success">Je vérifie</label> ''ls -l fichier'', ou ''ls -ld dossier'' pour le dossier lui-même. <badge>sys05</badge> <badge>ap03</badge> <badge>ap04</badge>

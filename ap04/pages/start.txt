@@ -1,0 +1,30 @@
+====== Le Livre rouge de Alice ======
+
+<lead>Le journal de bord de mes ateliers, servi par ma VM.</lead>
+
+<grid>
+<col sm="4">
+<panel type="success" title="La Comté">
+Linux, la série sys.
+  * [[comte:droits|Les droits]]
+</panel>
+</col>
+<col sm="4">
+<panel type="primary" title="Gondor">
+Le web : Apache, PHP.
+  * [[gondor:apache|Apache]]
+</panel>
+</col>
+<col sm="4">
+<panel type="warning" title="Erebor">
+Les bases de données.
+  * [[erebor:start|Bientôt]]
+</panel>
+</col>
+</grid>
+
+<callout type="info" icon="true" title="Fondcombe">
+Les pages écrites par mon binôme : [[fondcombe:start|le conseil de Fondcombe]].
+</callout>
+
+<label type="default">Privé</label> [[moria:start|La Moria]] : mes brouillons.

@@ -1,0 +1,7 @@
+====== Fondcombe ======
+
+<callout type="info" icon="true" title="Le conseil d'Elrond">
+Ici, mon binôme écrit ses conseils : une commande utile, présentée avec le plan des pages du Livre.
+</callout>
+
+  * [[fondcombe:bob|Le conseil de Bob]]

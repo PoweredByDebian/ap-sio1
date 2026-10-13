@@ -1,0 +1,35 @@
+====== Apache, le gardien de Gondor ======
+
+<callout type="info" icon="true" title="À quoi ça sert">
+(à compléter : à quoi sert Apache, en une ou deux phrases)
+</callout>
+
+===== La formule =====
+
+<code bash>
+(à compléter : les commandes systemctl pour Apache, une par ligne)
+</code>
+
+<grid>
+<col sm="6">
+<panel type="primary" title="Où sont les pages">
+(à compléter : /var/www/html, www-data, le journal d'accès)
+</panel>
+</col>
+<col sm="6">
+<panel type="primary" title="Une application hors de /var/www/html">
+(à compléter : Alias, <Directory>, AllowOverride, a2enconf)
+</panel>
+</col>
+</grid>
+
+===== Les codes de réponse =====
+
+^ Code ^ Ce qu'il veut dire ^ Où je l'ai vu ^
+| ''200'' | (à compléter) | (à compléter) |
+| ''403'' | (à compléter) | (à compléter) |
+| ''404'' | (à compléter) | (à compléter) |
+
+<alert type="danger" icon="true">**Le piège** : (à compléter)</alert>
+
+<label type="success">Je vérifie</label> (à compléter : une commande qui prouve qu'Apache va bien) <badge>ap03</badge> <badge>ap04</badge>

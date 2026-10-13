@@ -31,6 +31,13 @@ Si le professeur annonce une correction :
 cd ~/ap-sio1 && git pull
 ```
 
+## Copier le code d'une page
+
+Quand la fiche donne le code d'une page à recopier (ap04 : dossier `ap04/pages/`), copie-le depuis
+ce dépôt, pas depuis le PDF : un PDF supprime les espaces en début de ligne, et DokuWiki en a besoin
+(deux espaces avant `*` pour une liste à puces). Sur GitHub : ouvre le fichier, bouton **Raw**,
+puis Ctrl+A et Ctrl+C. Sur ta VM : `cat ~/ap-sio1/ap04/pages/<fichier>`.
+
 ## À savoir
 
 - Ce dépôt ne contient **aucune réponse** : les codes à trouver y sont vérifiés par empreinte
