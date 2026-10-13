@@ -1,7 +1,7 @@
 # Ateliers de professionnalisation : BTS SIO 1
 
-Programmes de contrôle `./verifier` des ateliers de professionnalisation (AP) du BTS SIO 1,
-Campus Beaupeyrat. Chaque atelier a son dossier (`ap03/`…). Sur ta VM, `./verifier` fait le point
+Programmes de contrôle `./check` des ateliers de professionnalisation (AP) du BTS SIO 1,
+Campus Beaupeyrat. Chaque atelier a son dossier (`ap03/`…). Sur ta VM, `./check` fait le point
 mission par mission : ✓ c'est bon, ✗ c'est à revoir (avec un conseil).
 
 ## Récupérer les programmes (une fois, sur ta VM)
@@ -14,12 +14,14 @@ git clone https://github.com/PoweredByDebian/ap-sio1.git
 
 ```bash
 cd ~/ap-sio1/ap03
-sudo ./verifier
+sudo ./check
 ```
 
 Le programme a besoin de `sudo` pour lire la configuration des services et interroger la base de
 données. Il ne modifie rien sur ta machine. Quand tout est juste, il finit par `exit 0` : appelle
 le professeur.
+
+En ap03, l'ancien nom `./verifier` marche encore : c'est un raccourci vers `./check`.
 
 ## Mettre à jour
 
@@ -33,7 +35,7 @@ cd ~/ap-sio1 && git pull
 
 - Ce dépôt ne contient **aucune réponse** : les codes à trouver y sont vérifiés par empreinte
   (sha256), ils ne sont pas lisibles.
-- `./verifier` sert à **te guider**. Ce n'est pas lui qui note l'atelier.
+- `./check` sert à **te guider**. Ce n'est pas lui qui note l'atelier.
 
 ---
 

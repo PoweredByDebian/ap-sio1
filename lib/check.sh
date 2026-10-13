@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Florent « fls » Sautour, Campus Beaupeyrat
 #
-# lib/verifier.sh : fonctions communes aux programmes ./verifier des ateliers.
-# A charger depuis apXX/verifier :  . "$(dirname "$0")/../lib/verifier.sh"
+# lib/check.sh : fonctions communes aux programmes ./check des ateliers.
+# A charger depuis apXX/check :  . "$(dirname "$(readlink -f "$0")")/../lib/check.sh"
 #
 #   need_root                    exige sudo (lecture de la conf, requetes MariaDB)
 #   title "Nom de l'atelier"     bandeau de debut
@@ -23,7 +23,7 @@ _last=0
 
 need_root() {
   if [ "$(id -u)" -ne 0 ]; then
-    echo "${_Y}Ce programme a besoin des droits d'administration : relance-le avec sudo ./verifier${_N}"
+    echo "${_Y}Ce programme a besoin des droits d'administration : relance-le avec sudo ./${0##*/}${_N}"
     exit 2
   fi
 }
@@ -55,6 +55,6 @@ finish() {
   if [ "$_score" -eq "$_total" ]; then
     echo; echo "${_G}$1${_N}"; exit 0
   fi
-  echo "  Corrige les ✗ puis relance sudo ./verifier."
+  echo "  Corrige les ✗ puis relance sudo ./${0##*/}."
   exit 1
 }

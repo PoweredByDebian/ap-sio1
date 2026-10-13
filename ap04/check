@@ -2,15 +2,15 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 # Copyright (C) 2026 Florent « fls » Sautour et Sébastien « sebthar » Tharaud, Campus Beaupeyrat
 #
-# ap04/verifier : fait le point sur l'atelier « Le Livre rouge » (Une appli web en PHP, DokuWiki).
-#   sudo ./verifier       toutes les missions
-#   sudo ./verifier 4     la mission 4 seulement
+# ap04/check : fait le point sur l'atelier « Le Livre rouge » (Une appli web en PHP, DokuWiki).
+#   sudo ./check       toutes les missions
+#   sudo ./check 4     la mission 4 seulement
 # Ne modifie rien sur la machine. Les codes du rapport sont vérifiés par empreinte (sha256).
-. "$(dirname "$(readlink -f "$0")")/../lib/verifier.sh"
+. "$(dirname "$(readlink -f "$0")")/../lib/check.sh"
 need_root
 
 ONLY="${1:-}"
-case "$ONLY" in ""|[1-9]|10) ;; *) echo "Usage : sudo ./verifier [1-10]"; exit 2 ;; esac
+case "$ONLY" in ""|[1-9]|10) ;; *) echo "Usage : sudo ./check [1-10]"; exit 2 ;; esac
 U="${SUDO_USER:-$(logname 2>/dev/null)}"
 H="$(getent passwd "$U" | cut -d: -f6)"
 R="$H/rapport-ap04.txt"
@@ -88,20 +88,24 @@ if run 5; then
   hint "sudo rm $D/install.php"
   check "nom du wiki : « Le Livre rouge de … »" grep -qiE "^\\\$conf\['title'\] *= *'Le Livre rouge" "$D/conf/local.php"
   check "ACL activées" grep -qE "^\\\$conf\['useacl'\] *= *1;" "$D/conf/local.php"
-  check "ton compte $U est administrateur du wiki" sh -c "awk -F: '\$1==\"$U\" && \$5 ~ /(^|,)admin(,|\$)/' $D/conf/users.auth.php | grep -q ."
-  hint "le superutilisateur doit être ton identifiant ($U)"
+  check "un compte administrateur existe" sh -c "awk -F: '\$1 !~ /^#/ && \$5 ~ /(^|,)admin(,|\$)/' $D/conf/users.auth.php | grep -q ."
+  hint "le superutilisateur se crée dans install.php"
   check "inscription fermée" grep -qE "^\\\$conf\['disableactions'\] *= *'[^']*register" "$D/conf/local.php"
-  hint "Administrer › Paramètres de configuration › disableactions : coche « S'enregistrer »"
+  hint "Admin › Configuration Settings › disableactions : coche « Register »"
 fi
 
 if run 6; then
   mission "Mission 6 : le look"
   check "template bootstrap3 installé" test -d "$D/lib/tpl/bootstrap3"
-  hint "Administrer › Gestionnaire d'extensions › Rechercher et installer"
+  hint "Admin › Extension Manager › Search and Install"
   check "template bootstrap3 activé" conf template bootstrap3
-  hint "Administrer › Paramètres de configuration › template : bootstrap3, puis Enregistrer"
-  check "extension bootstrapwrapper installée" test -d "$D/lib/plugins/bootstrapwrapper"
+  hint "Admin › Configuration Settings › template : bootstrap3, puis Save"
+  check "extension Bootstrap Wrapper installée" test -d "$D/lib/plugins/bootswrapper"
+  hint "cherche « bootstrap wrapper », avec l'espace (dossier lib/plugins/bootswrapper)"
   check "extension indexmenu installée" test -d "$D/lib/plugins/indexmenu"
+  hint "l'extension indexmenu, pas indexmenu2"
+  check "defer_js désactivé (pour le menu d'indexmenu)" grep -qE "^\\\$conf\['defer_js'\] *= *0;" "$D/conf/local.php"
+  hint "Admin › Configuration Settings › defer_js : décoche, puis Save"
 fi
 
 if run 7; then
@@ -109,17 +113,18 @@ if run 7; then
   check "accueil : Livre rouge et liens vers les régions" sh -c "grep -qi 'livre rouge' $P/start.txt && grep -q 'comte:' $P/start.txt && grep -q 'gondor:' $P/start.txt"
   hint "modifie la page start"
   check "la carte : indexmenu dans la sidebar" grep -q '{{indexmenu>' "$P/sidebar.txt"
-  hint "page sidebar : {{indexmenu>:#1|js}}"
-  check "comte:droits avec des encadrés" sh -c "grep -q '<callout' $P/comte/droits.txt && grep -q '<alert' $P/comte/droits.txt"
-  check "gondor:apache écrite avec tes mots (callout, alert)" sh -c "[ \$(grep -c '[[:alnum:]]' $P/gondor/apache.txt) -ge 6 ] && grep -q '<callout' $P/gondor/apache.txt && grep -q '<alert' $P/gondor/apache.txt"
-  hint "au moins un <callout> et un <alert>, et quelques lignes de ta main"
+  hint "page sidebar : {{indexmenu>:#1|js …}}, voir la fiche"
+  check "comte:droits avec Bootstrap Wrapper (callout, panneaux, onglets, alert)" sh -c "for t in callout panel tabs pane alert; do grep -q \"<\$t\" $P/comte/droits.txt || exit 1; done"
+  hint "recopie toute la page comte:droits de la fiche, balises comprises"
+  check "gondor:apache écrite avec tes mots (callout, panel, alert)" sh -c "[ \$(grep -c '[[:alnum:]]' $P/gondor/apache.txt) -ge 6 ] && grep -q '<callout' $P/gondor/apache.txt && grep -q '<panel' $P/gondor/apache.txt && grep -q '<alert' $P/gondor/apache.txt"
+  hint "au moins un <callout>, un <panel> et un <alert>, et quelques lignes de ta main"
   check "erebor:start et moria:start existent" sh -c "[ -s $P/erebor/start.txt ] && [ -s $P/moria/start.txt ]"
 fi
 
 if run 8; then
   mission "Mission 8 : qui a le droit ?"
   check "un compte pour ton binôme, dans le groupe binome" sh -c "[ -n \"\$(awk -F: -v u='$U' '\$1 !~ /^#/ && \$1 != u && \$5 ~ /(^|,)binome(,|\$)/' $D/conf/users.auth.php)\" ]"
-  hint "Administrer › Gestion des utilisateurs, groupes : user,binome"
+  hint "Admin › User Manager, Groups : user,binome"
   check "règle * @ALL : Lecture" acl '\*' '@ALL' 1
   check "règle * @user : Lecture (plus Envoyer)" sh -c "grep -qE '^\*[[:space:]]+@user[[:space:]]+1([[:space:]]|\$)' $D/conf/acl.auth.php && ! grep -qE '^\*[[:space:]]+@user[[:space:]]+8' $D/conf/acl.auth.php"
   hint "la règle de l'installeur donne Envoyer (8) à @user : passe-la en Lecture"
