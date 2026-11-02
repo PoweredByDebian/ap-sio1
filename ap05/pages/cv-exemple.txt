@@ -1,0 +1,18 @@
+## Formation
+
+- 2026-2028 : BTS SIO, Campus Beaupeyrat, Limoges
+- 2026 : baccalauréat (ta série ou ta spécialité), (ton lycée)
+
+## Compétences
+
+- Linux : commandes, comptes et droits, services (série sys)
+- Serveur web : Apache, PHP, MariaDB (ateliers ap03 à ap05)
+- WordPress : installation, pages, extensions, sauvegarde
+
+## Langues
+
+- Anglais : (ton niveau)
+
+## Centres d'intérêt
+
+- (ce qui te passionne)

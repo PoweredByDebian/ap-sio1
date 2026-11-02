@@ -1,0 +1,346 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florent « fls » Sautour et Sébastien « sebthar » Tharaud, Campus Beaupeyrat
+#
+# ap05/check : fait le point sur l'atelier « Ma vitrine » (Un CMS, mon portfolio : WordPress).
+#   sudo ./check       toutes les missions
+#   sudo ./check 8     la mission 8 seulement
+# Ne modifie rien sur la machine.
+. "$(dirname "$(readlink -f "$0")")/../lib/check.sh"
+need_root
+
+ONLY="${1:-}"
+case "$ONLY" in ""|[1-9]|1[0-4]) ;; *) echo "Usage : sudo ./check [1-14]"; exit 2 ;; esac
+U="${SUDO_USER:-$(logname 2>/dev/null)}"
+H="$(getent passwd "$U" | cut -d: -f6)"
+R="$H/rapport-ap05.txt"
+W=/var/www/wordpress          # le portfolio
+V=/var/www/vitrine            # sa copie (mission 14)
+CF="$W/wp-config.php"
+S="$H/sauvegarde"
+
+# ---------- outils ----------
+val()  { grep -m1 "^$1=" "$R" 2>/dev/null | cut -d= -f2- | tr -d '[:space:]'; }
+run()  { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
+ipv4() { echo "$1" | grep -qE '^([0-9]{1,3}\.){3}[0-9]{1,3}$'; }
+# cfg NOM [fichier] : la valeur de define( 'NOM', '…' ) dans wp-config.php
+cfg()  { grep -oE "define\( *['\"]$1['\"] *, *['\"][^'\"]*['\"]" "${2:-$CF}" 2>/dev/null | head -1 | sed -E "s/.*, *['\"]([^'\"]*)['\"]\$/\1/"; }
+T="$(sed -nE "s/^\\\$table_prefix *= *['\"]([A-Za-z0-9_]+)['\"].*/\1/p" "$CF" 2>/dev/null | head -1)"
+T="${T:-wp_}"
+# sql "requête" [base] ; opt nom [base] : une option de WordPress (table wp_options)
+sql()  { mariadb -NBe "$1" "${2:-portfolio}" 2>/dev/null; }
+opt()  { sql "SELECT option_value FROM ${T}options WHERE option_name='$1'" "${2:-portfolio}"; }
+num()  { [ "$(sql "$1" "${3:-portfolio}")" -ge "$2" ] 2>/dev/null; }
+grants() { mariadb -NBe "SHOW GRANTS FOR 'wp_portfolio'@'localhost'" 2>/dev/null; }
+# WordPress redirige une page demandée sous un autre nom que celui de l'installation :
+# on la demande donc à Apache en local, avec l'hôte du site (Host:).
+host() { opt home "${1:-portfolio}" | sed -E 's#^https?://([^/]+).*#\1#'; }
+web()  { curl -s --max-time 8 -H "Host: $(host "${2:-portfolio}")" "http://127.0.0.1$1"; }
+code() { curl -s -o /dev/null --max-time 8 -w '%{http_code}' -H "Host: $(host)" "http://127.0.0.1$1"; }
+page() { num "SELECT COUNT(*) FROM ${T}posts WHERE post_type='page' AND post_status='publish' AND post_name='$1'" 1; }
+role() { echo "m.meta_key='${T}capabilities' AND m.meta_value LIKE '%\"$1\"%'"; }
+
+# ---------- contrôles ----------
+c_php()       { apache2ctl -M 2>/dev/null | grep -q php; }
+c_binome()    { local b; b="$(val ip_binome)"; ipv4 "$b" && ! hostname -I | tr ' ' '\n' | grep -qx "$b"; }
+c_binome_web(){ local b; b="$(val ip_binome)"; ipv4 "$b" && curl -s -o /dev/null --max-time 5 "http://$b/"; }
+
+c_db()        { [ -n "$(mariadb -NBe "SHOW DATABASES LIKE 'portfolio'" 2>/dev/null)" ]; }
+c_user()      { [ "$(mariadb -NBe "SELECT COUNT(*) FROM mysql.user WHERE user='wp_portfolio' AND host='localhost'" 2>/dev/null)" = 1 ]; }
+c_grant()     { grants | grep -q 'GRANT ALL PRIVILEGES ON `portfolio`\.\*'; }
+c_grant_only(){ local g; g="$(grants)" && [ -n "$g" ] && [ "$(echo "$g" | grep -vc 'USAGE ON \*\.\*\|ON `portfolio`\.\*\|ON `vitrine`\.\*')" = 0 ]; }
+
+c_ext()       { local m e; m="$(php -m 2>/dev/null)" || return 1
+                for e in curl zip imagick xml mbstring intl gd mysqli; do echo "$m" | grep -qx "$e" || return 1; done; }
+c_root()      { [ -f "$W/index.php" ] && [ "$(stat -c %U "$W" "$W/index.php" "$W/wp-admin" "$W/wp-includes" | sort -u)" = root ]; }
+c_content()   { [ "$(stat -c %U "$W/wp-content" "$W/wp-content/themes" "$W/wp-content/plugins" 2>/dev/null | sort -u)" = www-data ]; }
+c_only()      { [ -f "$W/index.php" ] && [ -z "$(find "$W" -maxdepth 1 -mindepth 1 -user www-data ! -name wp-content)" ] \
+                && [ -z "$(find "$W/wp-admin" "$W/wp-includes" -user www-data | head -1)" ]; }
+c_version()   { local v; v="$(sed -nE "s/^\\\$wp_version = '([^']+)';.*/\1/p" "$W/wp-includes/version.php" 2>/dev/null)"
+                [ -n "$v" ] && [ "$(val version_wordpress)" = "$v" ]; }
+
+c_dbconst()   { [ "$(cfg DB_NAME)" = portfolio ] && [ "$(cfg DB_USER)" = wp_portfolio ] && [ "$(cfg DB_HOST)" = localhost ]; }
+c_connect()   { [ -f "$CF" ] && mariadb -u wp_portfolio -p"$(cfg DB_PASSWORD)" -h localhost -NBe 'SELECT 1' portfolio; }
+c_keys()      { [ -f "$CF" ] && ! grep -q 'put your unique phrase here' "$CF" \
+                && [ "$(grep -cE "define\( *['\"](AUTH|SECURE_AUTH|LOGGED_IN|NONCE)_(KEY|SALT)['\"]" "$CF")" = 8 ]; }
+c_fs()        { [ "$(cfg FS_METHOD)" = direct ]; }
+c_cfmode()    { [ "$(stat -c '%U:%G %a' "$CF" 2>/dev/null)" = 'root:www-data 640' ]; }
+
+c_rewrite()   { apache2ctl -M 2>/dev/null | grep -q rewrite_module; }
+c_alias()     { grep -qiE "^[[:space:]]*Alias[[:space:]]+/portfolio/?[[:space:]]+\"?$W/?\"?[[:space:]]*\$" /etc/apache2/conf-available/portfolio.conf 2>/dev/null; }
+c_override()  { awk -v d="$W" 'tolower($1)=="<directory" {gsub(/[">]/,"",$2); sub(/\/$/,"",$2); ind=($2==d)}
+                ind && tolower($1)=="allowoverride" && tolower($2)=="all" {f=1}
+                tolower($1)=="</directory>" {ind=0} END {exit !f}' /etc/apache2/conf-available/portfolio.conf 2>/dev/null; }
+c_installer() { [ "$(curl -s -o /dev/null --max-time 8 -w '%{http_code}' http://127.0.0.1/portfolio/wp-admin/install.php)" = 200 ]; }
+c_noleak()    { [ -f "$CF" ] && ! curl -s --max-time 8 http://127.0.0.1/portfolio/wp-config.php | grep -q 'DB_PASSWORD'; }
+
+c_installed() { [ -n "$(opt siteurl)" ]; }
+c_title()     { opt blogname | grep -qiE '^portfolio'; }
+c_admin()     { num "SELECT COUNT(*) FROM ${T}usermeta m WHERE $(role administrator)" 1 \
+                && [ "$(sql "SELECT COUNT(*) FROM ${T}users WHERE user_login='admin'")" = 0 ]; }
+# Les tables créées par l'installeur (une extension peut en ajouter ensuite : on ne compte que celles-là)
+CORE="users usermeta posts postmeta comments commentmeta terms termmeta term_taxonomy term_relationships options links"
+c_tables()    { local n=0 t l; l="$(mariadb -NBe "SHOW TABLES" portfolio 2>/dev/null)"
+                for t in $CORE; do echo "$l" | grep -qx "$T$t" && n=$((n + 1)); done
+                [ "$n" -gt 0 ] && [ "$(val tables_wordpress)" = "$n" ]; }
+c_permalink() { [ "$(opt permalink_structure)" = '/%postname%/' ]; }
+c_htaccess()  { grep -qE '^RewriteBase /portfolio/$' "$W/.htaccess" 2>/dev/null; }
+c_pretty()    { [ "$(code /portfolio/wp-json/)" = 200 ]; }
+
+c_theme()     { local s; s="$(opt stylesheet)"; [ -n "$s" ] && [ -f "$W/wp-content/themes/$s/templates/index.html" ]; }
+c_mine()      { local s; s="$(opt stylesheet)"; [ -n "$s" ] && ! echo "$s" | grep -q '^twenty'; }
+c_themeown()  { local s; s="$(opt stylesheet)"; [ -n "$s" ] && [ "$(stat -c %U "$W/wp-content/themes/$s" 2>/dev/null)" = www-data ]; }
+c_hello()     { [ -d "$W/wp-content/plugins" ] && [ ! -e "$W/wp-content/plugins/hello.php" ]; }
+
+c_samples()   { c_installed && [ "$(sql "SELECT COUNT(*) FROM ${T}posts WHERE post_status='publish' AND post_name IN ('page-d-exemple','bonjour-tout-le-monde')")" = 0 ]; }
+c_pages()     { page presentation && page cv && page le-bts-sio && page stages && page ateliers; }
+c_stages()    { num "SELECT COUNT(*) FROM ${T}posts c JOIN ${T}posts p ON c.post_parent=p.ID WHERE p.post_name='stages'
+                     AND p.post_type='page' AND p.post_status='publish' AND c.post_type='page' AND c.post_status='publish'" 2; }
+c_filled()    { c_pages && [ "$(sql "SELECT COUNT(*) FROM ${T}posts WHERE post_type='page' AND post_status='publish'
+                     AND post_name IN ('presentation','cv','le-bts-sio','stages','ateliers') AND post_content NOT LIKE '%wp:paragraph%'")" = 0 ]; }
+c_cv()        { local c; c="$(sql "SELECT post_content FROM ${T}posts WHERE post_type='page' AND post_status='publish' AND post_name='cv' LIMIT 1")"
+                echo "$c" | grep -q 'wp:heading' && echo "$c" | grep -q 'wp:list'; }
+c_front()     { [ "$(opt show_on_front)" = page ] && [ "$(sql "SELECT post_status FROM ${T}posts WHERE ID='$(opt page_on_front)' AND post_type='page'")" = publish ]; }
+c_postspage() { [ "$(sql "SELECT post_name FROM ${T}posts WHERE ID='$(opt page_for_posts)' AND post_type='page' AND post_status='publish'")" = veille-technologique ]; }
+c_menu()      { c_installed && web /portfolio/ | grep -q '/portfolio/cv/'; }
+
+veille="FROM ${T}posts p JOIN ${T}term_relationships r ON r.object_id=p.ID JOIN ${T}term_taxonomy x ON x.term_taxonomy_id=r.term_taxonomy_id
+        JOIN ${T}terms t ON t.term_id=x.term_id WHERE p.post_type='post' AND p.post_status='publish' AND x.taxonomy='category' AND t.slug='veille'"
+c_cat()       { num "SELECT COUNT(*) FROM ${T}terms t JOIN ${T}term_taxonomy x ON x.term_id=t.term_id WHERE x.taxonomy='category' AND t.slug='veille'" 1; }
+c_article()   { num "SELECT COUNT(*) $veille AND p.post_content LIKE '%wp:image%'" 1; }
+c_upload()    { [ -n "$(find "$W/wp-content/uploads" -type f \( -iname '*.jpg' -o -iname '*.jpeg' -o -iname '*.png' -o -iname '*.webp' -o -iname '*.gif' -o -iname '*.avif' \) 2>/dev/null | head -1)" ]; }
+c_alt()       { num "SELECT COUNT(*) FROM ${T}postmeta WHERE meta_key='_wp_attachment_image_alt' AND TRIM(meta_value)<>''" 1; }
+
+c_contrib()   { num "SELECT COUNT(*) FROM ${T}users u JOIN ${T}usermeta m ON m.user_id=u.ID WHERE $(role contributor) AND u.user_login<>'$U'" 1; }
+c_review()    { num "SELECT COUNT(*) FROM ${T}posts p JOIN ${T}usermeta m ON m.user_id=p.post_author WHERE p.post_type='post' AND p.post_status='publish' AND $(role contributor)" 1; }
+# L'API de WordPress ne montre aux visiteurs que les comptes qui ont publié : ta page existe chez ton binôme
+c_there()     { local b; b="$(val ip_binome)"; ipv4 "$b" && curl -fsS --max-time 8 "http://$b/portfolio/?rest_route=/wp/v2/users&slug=$U" | grep -q "\"slug\":\"$U\""; }
+
+c_legal()     { local c; c="$(sql "SELECT post_content FROM ${T}posts WHERE post_type='page' AND post_status='publish' AND post_name='mentions-legales' LIMIT 1")"
+                echo "$c" | grep -qi 'beaupeyrat' && ! echo "$c" | grep -qE '\((ton |ta |adresse du campus)'; }
+c_privacy()   { local p; p="$(opt wp_page_for_privacy_policy)"; [ -n "$p" ] && [ "$(sql "SELECT post_status FROM ${T}posts WHERE ID='$p'")" = publish ]; }
+c_cookies()   { opt active_plugins | grep -qiE 'cookie|gdpr|complianz'; }
+
+c_tagline()   { c_installed && [ -n "$(opt blogdescription | tr -d '[:space:]')" ]; }
+c_public()    { [ "$(opt blog_public)" = 1 ]; }
+c_sitemap()   { c_installed && web /portfolio/wp-sitemap.xml | grep -q 'sitemapindex'; }
+c_count()     { local n; n="$(sql "SELECT COUNT(*) FROM ${T}posts WHERE post_type='page' AND post_status='publish'")"
+                [ -n "$n" ] && [ "$(val pages_sitemap)" = "$n" ]; }
+
+c_dump()      { grep -q "CREATE TABLE \`${T}posts\`" "$S/portfolio.sql" 2>/dev/null; }
+c_tgz()       { local l; l="$(tar tzf "$S/fichiers.tgz" 2>/dev/null)"; echo "$l" | grep -qx 'wordpress/wp-config.php' && echo "$l" | grep -q '^wordpress/wp-content/uploads/'; }
+c_mine2()     { [ "$(stat -c %U "$S/portfolio.sql" "$S/fichiers.tgz" 2>/dev/null | sort -u)" = "$U" ]; }
+
+c_vdb()       { [ -n "$(opt siteurl vitrine)" ]; }
+c_vgrant()    { grants | grep -q 'ON `vitrine`\.\*'; }
+c_vfiles()    { [ -f "$V/wp-load.php" ] && [ "$(cfg DB_NAME "$V/wp-config.php")" = vitrine ]; }
+c_vhtaccess() { grep -qE '^RewriteBase /vitrine/$' "$V/.htaccess" 2>/dev/null && grep -qE '^RewriteRule \. /vitrine/index\.php' "$V/.htaccess"; }
+c_vconf()     { [ -e /etc/apache2/conf-enabled/vitrine.conf ] \
+                && grep -qiE "^[[:space:]]*Alias[[:space:]]+/vitrine/?[[:space:]]+\"?$V/?\"?[[:space:]]*\$" /etc/apache2/conf-available/vitrine.conf && apache2ctl configtest; }
+c_vurl()      { opt siteurl vitrine | grep -qE '/vitrine/?$' && opt home vitrine | grep -qE '/vitrine/?$'; }
+c_vweb()      { c_vdb && web /vitrine/ vitrine | grep -q '/vitrine/'; }
+c_vtitle()    { local a b; a="$(opt blogname)"; b="$(opt blogname vitrine)"; [ -n "$b" ] && [ "$a" != "$b" ]; }
+c_original()  { c_installed && web /portfolio/ | grep -q '/portfolio/'; }
+
+# ---------- missions ----------
+title "Ma vitrine · ap05 · compte $U"
+
+if run 1; then
+  mission "Mission 1 : reprendre la main"
+  check "Apache tourne toujours" systemctl is-active -q apache2
+  hint "sudo systemctl start apache2 (installé en ap03)"
+  check "MariaDB tourne toujours" systemctl is-active -q mariadb
+  hint "sudo systemctl start mariadb (installé en ap03)"
+  check "Apache exécute PHP (module de l'ap03)" c_php
+  hint "sudo apt install php libapache2-mod-php, puis sudo systemctl restart apache2"
+  check "rapport : ip_binome" c_binome
+  hint "ligne ip_binome=… dans ~/rapport-ap05.txt : l'IP de la VM de ton binôme, pas la tienne"
+  check "la VM de ton binôme répond (web)" c_binome_web
+  hint "vérifie l'IP avec ton binôme ; son Apache doit tourner"
+fi
+
+if run 2; then
+  mission "Mission 2 : la base du portfolio"
+  check "la base portfolio existe" c_db
+  hint "sudo mariadb, puis CREATE DATABASE portfolio;"
+  check "le compte wp_portfolio@localhost existe" c_user
+  hint "CREATE USER 'wp_portfolio'@'localhost' IDENTIFIED BY '…'; (12 caractères au moins)"
+  check "wp_portfolio a tous les droits sur portfolio.*" c_grant
+  hint "GRANT ALL PRIVILEGES ON portfolio.* TO 'wp_portfolio'@'localhost';"
+  check "wp_portfolio n'a pas d'autre droit" c_grant_only
+  hint "un compte d'application n'a de droits que sur sa base (ici portfolio, et vitrine en mission 14)"
+fi
+
+if run 3; then
+  mission "Mission 3 : récupérer WordPress"
+  check "extensions PHP : curl, zip, imagick (et celles de l'ap04)" c_ext
+  hint "sudo apt install php-curl php-zip php-imagick, puis sudo systemctl restart apache2"
+  check "WordPress est rangé dans $W" test -f "$W/wp-load.php"
+  hint "cd ~ ; tar xzf latest-fr_FR.tar.gz ; sudo mv wordpress $W"
+  check "le code de WordPress appartient à root" c_root
+  hint "sudo chown -R root:root $W, puis rends wp-content à www-data"
+  check "www-data possède wp-content, ses thèmes et ses extensions" c_content
+  hint "sudo chown -R www-data:www-data $W/wp-content"
+  check "rien d'autre n'appartient à www-data" c_only
+  hint "seul wp-content (où WordPress écrit) est à www-data"
+  check "rapport : version_wordpress" c_version
+  hint "la version affichée par grep wp_version $W/wp-includes/version.php (ex. 7.1.4)"
+fi
+
+if run 4; then
+  mission "Mission 4 : la carte d'accès"
+  check "wp-config.php existe" test -f "$CF"
+  hint "cd $W ; sudo cp wp-config-sample.php wp-config.php"
+  check "wp-config.php sans erreur de syntaxe" php -l "$CF"
+  hint "sudo php -l $CF donne la ligne fautive (une apostrophe ou un ; oublié ?)"
+  check "DB_NAME portfolio, DB_USER wp_portfolio, DB_HOST localhost" c_dbconst
+  check "WordPress se connecte à la base avec ce compte" c_connect
+  hint "DB_PASSWORD doit être le mot de passe donné à wp_portfolio en mission 2"
+  check "les 8 clés de sécurité sont remplacées" c_keys
+  hint "les 8 lignes données par curl -s https://api.wordpress.org/secret-key/1.1/salt/"
+  check "FS_METHOD direct (thèmes et extensions sans FTP)" c_fs
+  hint "define( 'FS_METHOD', 'direct' ); juste avant « C’est tout, ne touchez pas à ce qui suit »"
+  check "wp-config.php : root:www-data, droits 640" c_cfmode
+  hint "sudo chown root:www-data wp-config.php ; sudo chmod 640 wp-config.php"
+fi
+
+if run 5; then
+  mission "Mission 5 : la porte d'Apache"
+  check "module rewrite activé" c_rewrite
+  hint "sudo a2enmod rewrite, puis sudo systemctl restart apache2"
+  check "configuration portfolio activée" test -e /etc/apache2/conf-enabled/portfolio.conf
+  hint "sudo a2enconf portfolio, puis sudo systemctl reload apache2"
+  check "Alias /portfolio vers $W" c_alias
+  check "AllowOverride All dans <Directory $W>" c_override
+  hint "sans AllowOverride All, Apache ignore le .htaccess de WordPress (mission 6)"
+  check "configuration Apache sans erreur" apache2ctl configtest
+  hint "sudo apache2ctl configtest : il indique le fichier et la ligne fautive"
+  check "l'installeur de WordPress répond" c_installer
+  hint "« Erreur lors de la connexion à la base de données » ? relis DB_NAME, DB_USER, DB_PASSWORD"
+  check "wp-config.php ne s'affiche pas dans le navigateur" c_noleak
+  hint "le module PHP doit être chargé : sudo apache2ctl -M | grep php"
+fi
+
+if run 6; then
+  mission "Mission 6 : l'installeur"
+  check "WordPress est installé (ses tables sont dans la base)" c_installed
+  hint "ouvre http://<IP de ta VM>/portfolio/ et remplis l'installeur"
+  check "titre du site : « Portfolio de … »" c_title
+  hint "Réglages › Général › Titre du site"
+  check "un administrateur, et aucun compte nommé admin" c_admin
+  hint "« admin » est le premier identifiant qu'essaient les pirates"
+  check "rapport : tables_wordpress" c_tables
+  hint "compte les lignes de sudo mariadb portfolio -e 'SHOW TABLES;'"
+  check "permaliens : « Titre de la publication »" c_permalink
+  hint "Réglages › Permaliens › Titre de la publication, puis Enregistrer les modifications"
+  check ".htaccess en place (RewriteBase /portfolio/)" c_htaccess
+  hint "sudo cp ~/ap-sio1/ap05/pages/htaccess $W/.htaccess"
+  check "les adresses propres marchent (/portfolio/wp-json/)" c_pretty
+  hint "il faut les trois : module rewrite, AllowOverride All (mission 5) et le .htaccess"
+fi
+
+if run 7; then
+  mission "Mission 7 : l'habit"
+  check "un thème à blocs installé et activé" c_theme
+  hint "Apparence › Thèmes › Ajouter un thème › onglet « Thèmes basés sur des blocs »"
+  check "ce n'est pas un thème Twenty Twenty-…" c_mine
+  hint "choisis un thème à toi, pas un de ceux livrés avec WordPress"
+  check "le thème a été installé par WordPress (dossier à www-data)" c_themeown
+  check "l'extension Hello Dolly est supprimée" c_hello
+  hint "Extensions › Extensions installées › Hello Dolly › Supprimer"
+fi
+
+if run 8; then
+  mission "Mission 8 : les pages du portfolio"
+  check "Page d'exemple et « Bonjour tout le monde ! » à la corbeille" c_samples
+  hint "Pages › Toutes les pages, et Articles › Tous les articles : Corbeille"
+  check "pages publiées : Présentation, CV, Le BTS SIO, Stages, Ateliers" c_pages
+  hint "titres exacts de la fiche ; l'identifiant de la page se lit dans Réglages de la page › Lien"
+  check "Stages a deux sous-pages publiées (stages de 1re et de 2e année)" c_stages
+  hint "dans chaque page de stage : Réglages de la page › Parent : Stages"
+  check "chaque page a du contenu (au moins un paragraphe)" c_filled
+  check "CV : des titres et des listes" c_cv
+  hint "blocs Titre et Liste : copie pages/cv-exemple.txt depuis le dépôt (Raw), puis adapte"
+  check "page d'accueil statique : une page publiée" c_front
+  hint "Réglages › Lecture › La page d'accueil affiche : Une page statique, Accueil"
+  check "page des articles : Veille technologique" c_postspage
+  hint "Réglages › Lecture › Page des articles : Veille technologique"
+  check "le site affiche le menu (lien vers la page CV)" c_menu
+  hint "le thème affiche la liste des pages : vérifie que la page CV est publiée"
+fi
+
+if run 9; then
+  mission "Mission 9 : le blog de veille"
+  check "la catégorie Veille existe" c_cat
+  hint "Articles › Catégories : Veille"
+  check "un article publié dans Veille, avec une image" c_article
+  hint "dans l'article : un bloc Image, puis Réglages de l'article › Catégories : Veille"
+  check "l'image est dans wp-content/uploads" c_upload
+  hint "Médias › Ajouter un fichier média, ou Téléverser dans le bloc Image"
+  check "l'image a un texte alternatif" c_alt
+  hint "Médias › clique l'image › Texte alternatif : décris-la en une phrase"
+fi
+
+if run 10; then
+  mission "Mission 10 : le relecteur"
+  check "un compte Contributeur pour ton binôme" c_contrib
+  hint "Comptes › Ajouter un compte : son identifiant, rôle Contributeur/contributrice"
+  check "son article est publié chez toi, après ta relecture" c_review
+  hint "ton binôme clique « Soumettre à la relecture » ; toi : Articles › En attente de relecture › Publier"
+  check "ton article est publié chez ton binôme" c_there
+  hint "sur http://<IP de ton binôme>/portfolio/wp-admin/, avec le compte qu'il t'a créé"
+fi
+
+if run 11; then
+  mission "Mission 11 : mentions légales et cookies"
+  check "page Mentions légales publiée et complétée" c_legal
+  hint "copie pages/mentions-legales.txt (Raw), puis remplace chaque « (ton …) » par tes informations"
+  check "Politique de confidentialité publiée" c_privacy
+  hint "Pages : « Politique de confidentialité » est en brouillon ; relis-la, puis Publier"
+  check "une extension de consentement aux cookies est active" c_cookies
+  hint "Extensions › Ajouter une extension : « Cookie Notice », Installer maintenant, puis Activer"
+fi
+
+if run 12; then
+  mission "Mission 12 : être trouvé"
+  check "le slogan est rempli" c_tagline
+  hint "Réglages › Général › Slogan"
+  check "les moteurs de recherche peuvent indexer le site" c_public
+  hint "Réglages › Lecture : décoche « Demander aux moteurs de recherche de ne pas indexer ce site »"
+  check "le plan du site répond (/portfolio/wp-sitemap.xml)" c_sitemap
+  hint "il n'existe que si le site peut être indexé (ligne précédente)"
+  check "rapport : pages_sitemap" c_count
+  hint "le « Nombre d’URL » de /portfolio/wp-sitemap-posts-page-1.xml (après avoir publié toutes tes pages)"
+fi
+
+if run 13; then
+  mission "Mission 13 : sauvegarder la vitrine"
+  check "la base : ~/sauvegarde/portfolio.sql" c_dump
+  hint "sudo mariadb-dump portfolio > ~/sauvegarde/portfolio.sql"
+  check "les fichiers : ~/sauvegarde/fichiers.tgz (wp-config.php et wp-content)" c_tgz
+  hint "sudo tar czf ~/sauvegarde/fichiers.tgz -C /var/www wordpress"
+  check "les deux fichiers sont à ton compte (pour les copier)" c_mine2
+  hint "sudo chown $U:$U ~/sauvegarde/*"
+fi
+
+if run 14; then
+  mission "Mission 14 : déménager"
+  check "la base vitrine contient le site" c_vdb
+  hint "CREATE DATABASE vitrine; GRANT… ; puis sudo mariadb vitrine < ~/sauvegarde/portfolio.sql"
+  check "wp_portfolio a les droits sur vitrine.*" c_vgrant
+  check "les fichiers sont dans $V, avec DB_NAME vitrine" c_vfiles
+  hint "sudo nano $V/wp-config.php : DB_NAME 'vitrine'"
+  check ".htaccess de la copie : /vitrine/" c_vhtaccess
+  hint "deux lignes à changer : RewriteBase et la dernière RewriteRule"
+  check "configuration vitrine activée (Alias /vitrine)" c_vconf
+  hint "sudo a2enconf vitrine, puis sudo systemctl reload apache2"
+  check "adresses de la copie : siteurl et home en /vitrine" c_vurl
+  hint "UPDATE ${T}options SET option_value='http://<IP>/vitrine' WHERE option_name IN ('siteurl','home');"
+  check "la copie répond sur /vitrine/, avec ses propres adresses" c_vweb
+  check "la copie a son propre titre" c_vtitle
+  hint "sur http://<IP>/vitrine/wp-admin/ : Réglages › Général › Titre du site, « … (copie) »"
+  check "l'original marche toujours (/portfolio/)" c_original
+fi
+
+if [ -n "$ONLY" ]; then finish "Mission $ONLY validée : passe à la suivante."; fi
+finish "Toutes les missions sont validées : exit 0. Appelle le professeur."

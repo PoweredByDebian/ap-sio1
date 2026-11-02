@@ -1,0 +1,19 @@
+## Éditeur du site
+
+Ce site est le portfolio de (ton prénom et ton nom), étudiant(e) en BTS Services informatiques aux organisations (SIO) au Campus Beaupeyrat.
+
+Responsable de la publication : (ton prénom et ton nom).
+
+Contact : (ton adresse électronique du campus).
+
+## Hébergement
+
+Ce site est hébergé sur un serveur du Campus Beaupeyrat, (adresse du campus, donnée par le professeur).
+
+## Propriété intellectuelle
+
+Les textes et les images de ce site sont la propriété de leur auteur(e), sauf mention contraire. Toute reproduction sans autorisation est interdite.
+
+## Données personnelles
+
+Ce site ne collecte aucune donnée personnelle en dehors des cookies techniques nécessaires à son fonctionnement. Pour en savoir plus, consulte la page Politique de confidentialité.

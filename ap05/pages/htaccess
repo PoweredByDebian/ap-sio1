@@ -1,0 +1,15 @@
+# BEGIN WordPress
+# ap05 : les règles des permaliens de WordPress, pour un site publié sous /portfolio/
+# (fichier /var/www/wordpress/.htaccess). Une adresse comme /portfolio/cv/ ne correspond
+# à aucun fichier : Apache la passe à /portfolio/index.php, et WordPress trouve la page.
+<IfModule mod_rewrite.c>
+RewriteEngine On
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteBase /portfolio/
+RewriteRule ^index\.php$ - [L]
+RewriteCond %{REQUEST_FILENAME} !-f
+RewriteCond %{REQUEST_FILENAME} !-d
+RewriteRule . /portfolio/index.php [L]
+</IfModule>
+
+# END WordPress
