@@ -142,7 +142,7 @@ if run 2; then
   check "wp_portfolio a tous les droits sur portfolio.*" c_grant
   hint "GRANT ALL PRIVILEGES ON portfolio.* TO 'wp_portfolio'@'localhost';"
   check "wp_portfolio n'a pas d'autre droit" c_grant_only
-  hint "un compte d'application n'a de droits que sur sa base (ici portfolio ; vitrine aussi, si tu fais le déménagement facultatif)"
+  hint "un compte d'application n'a de droits que sur sa base (ici portfolio)"
 fi
 
 if run 3; then
