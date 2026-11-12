@@ -1,0 +1,16 @@
+## Quoi ?
+
+(ce qui est nouveau, en deux ou trois phrases, avec tes mots : qui, quoi, quand)
+
+## Et alors ?
+
+(pour qui c'est important, et pourquoi : un administrateur, un développeur, une PME, toi)
+
+## Et maintenant ?
+
+(ce que tu proposes : mettre à jour, tester, attendre la suite, prévenir quelqu'un)
+
+## Mes sources
+
+- (source d'origine : nom, date, lien)
+- (confirmation : nom, date, lien)

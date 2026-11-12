@@ -1,0 +1,15 @@
+## Quoi ?
+
+(la faille en une phrase : le logiciel, ce qu'un attaquant peut faire, la gravité)
+
+## Qui est concerné ?
+
+(les versions touchées, et la version qui corrige)
+
+## Mon verdict
+
+(concerné, pas concerné ou corrigé : la version de ton portfolio, et ce que tu en conclus)
+
+## Source d'origine
+
+(le bulletin de l'éditeur ou l'avis du CERT-FR, avec son lien et sa date ; le numéro de CVE)
