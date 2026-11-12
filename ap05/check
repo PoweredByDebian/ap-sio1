@@ -235,7 +235,7 @@ if run 8; then
   check "chaque page a du contenu (au moins un bloc)" c_filled
   hint "Présentation, CV, Le BTS SIO, Stages, Ateliers : écris au moins un paragraphe ou une liste, puis Enregistrer"
   check "CV : des titres et des listes" c_cv
-  hint "blocs Titre et Liste : copie pages/cv-exemple.txt depuis le dépôt (Raw), puis adapte"
+  hint "blocs Titre et Liste : copie pages/cv-exemple.txt depuis le dépôt (Raw), colle avec Ctrl+Maj+V, puis adapte"
   check "page d'accueil statique : une page publiée" c_front
   hint "Réglages › Lecture › La page d'accueil affiche : Une page statique, Accueil"
   check "page des articles : Blog" c_postspage

@@ -1,0 +1,42 @@
+## Mon sujet de veille
+
+**Domaine** : (ton domaine, par exemple la cybersécurité)
+
+**Thème** : (ton thème, par exemple les failles des sites WordPress)
+
+**Mots-clés** : (tes mots-clés, séparés par des virgules)
+
+**Pourquoi ce sujet** : (une ou deux phrases : ce qui t'intéresse, le lien avec ton option SISR ou SLAM)
+
+## Mes sources
+
+| Source | Type | Adresse du flux | Intérêt |
+|---|---|---|---|
+| (nom de la source 1) | (autorité, éditeur, actualité, communauté ou dépôt) | (adresse du flux) | (ce qu'elle t'apporte) |
+| (nom de la source 2) | (type) | (adresse du flux) | (intérêt) |
+| (nom de la source 3) | (type) | (adresse du flux) | (intérêt) |
+| (nom de la source 4) | (type) | (adresse du flux) | (intérêt) |
+| (nom de la source 5) | (type) | (adresse du flux) | (intérêt) |
+| (nom de la source 6) | (type) | (adresse du flux) | (intérêt) |
+
+## Ma stratégie de collecte
+
+- **Mon lecteur** : (son nom, en ligne ou sur ton poste)
+- **Ce qui vient à moi (push)** : (tes flux, tes newsletters, ton alerte)
+- **Ce que je vais chercher (pull)** : (tes recherches, tes favoris)
+- **Mon rythme** : (quand tu lis ta veille, par exemple 15 minutes le lundi et le jeudi)
+- **Mon rangement** : (tes dossiers dans le lecteur, tes favoris)
+
+## Mon tableau de synthèse
+
+| N° | Titre | Source et auteur | Date | Résumé | Pertinence | Actualité | Fiabilité | Note /9 |
+|---|---|---|---|---|---|---|---|---|
+| 1 | (titre de l'article) | (site, auteur) | (date) | (une phrase) | (1 à 3) | (1 à 3) | (1 à 3) | (total) |
+| 2 | (titre) | (site, auteur) | (date) | (une phrase) | (1 à 3) | (1 à 3) | (1 à 3) | (total) |
+| 3 | (titre) | (site, auteur) | (date) | (une phrase) | (1 à 3) | (1 à 3) | (1 à 3) | (total) |
+| 4 | (titre) | (site, auteur) | (date) | (une phrase) | (1 à 3) | (1 à 3) | (1 à 3) | (total) |
+| 5 | (titre) | (site, auteur) | (date) | (une phrase) | (1 à 3) | (1 à 3) | (1 à 3) | (total) |
+
+## Mes notes de veille
+
+Mes analyses sont publiées dans la catégorie Veille de mon blog.

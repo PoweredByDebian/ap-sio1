@@ -1,0 +1,184 @@
+#!/bin/bash
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 Florent « fls » Sautour et Sébastien « sebthar » Tharaud, Campus Beaupeyrat
+#
+# ap06/check : fait le point sur l'atelier « Mon radar » (la veille technologique, dans le portfolio de l'ap05).
+#   sudo ./check       toutes les missions
+#   sudo ./check 6     la mission 6 seulement
+# Ne modifie rien sur la machine.
+. "$(dirname "$(readlink -f "$0")")/../lib/check.sh"
+need_root
+
+ONLY="${1:-}"
+case "$ONLY" in ""|[1-9]) ;; *) echo "Usage : sudo ./check [1-9]"; exit 2 ;; esac
+U="${SUDO_USER:-$(logname 2>/dev/null)}"
+H="$(getent passwd "$U" | cut -d: -f6)"
+R="$H/rapport-ap06.txt"
+O="$H/abonnements.opml"
+W=/var/www/wordpress          # le portfolio de l'ap05
+CF="$W/wp-config.php"
+
+# ---------- outils ----------
+raw()  { grep -m1 "^$1=" "$R" 2>/dev/null | cut -d= -f2- | sed -E 's/^[[:space:]]+|[[:space:]]+$//g'; }
+val()  { raw "$1" | tr -d '[:space:]'; }
+run()  { [ -z "$ONLY" ] || [ "$ONLY" = "$1" ]; }
+T="$(sed -nE "s/^\\\$table_prefix *= *['\"]([A-Za-z0-9_]+)['\"].*/\1/p" "$CF" 2>/dev/null | head -1)"
+T="${T:-wp_}"
+sql()  { mariadb -NBe "$1" portfolio 2>/dev/null; }
+opt()  { sql "SELECT option_value FROM ${T}options WHERE option_name='$1'"; }
+num()  { [ "$(sql "$1")" -ge "$2" ] 2>/dev/null; }
+# WordPress redirige une page demandée sous un autre nom que celui de l'installation :
+# on la demande donc à Apache en local, avec l'hôte du site (Host:).
+host() { opt home | sed -E 's#^https?://([^/]+).*#\1#'; }
+web()  { curl -s --max-time 15 -H "Host: $(host)" "http://127.0.0.1$1"; }
+code() { curl -s -o /dev/null --max-time 15 -w '%{http_code}' -H "Host: $(host)" "http://127.0.0.1$1"; }
+# contenu de la page « Ma veille » ; tableau N (1 = les sources, 2 = la synthèse)
+page() { sql "SELECT post_content FROM ${T}posts WHERE post_type='page' AND post_status='publish' AND post_name='ma-veille' ORDER BY ID DESC LIMIT 1"; }
+table(){ page | awk -v n="$1" 'BEGIN{RS="<!-- wp:table"} NR==n+1'; }
+rows() { table "$1" | grep -o '<tr' | wc -l; }
+# abonnements.opml : nombre de flux, nombre de dossiers (un dossier = un <outline> qui contient des flux)
+opml() { php -r '$x = @simplexml_load_file($argv[1]); if (!$x) exit(1);
+                 echo count($x->xpath("//outline[@xmlUrl]")), " ", count($x->xpath("//outline[outline[@xmlUrl]]"));' "$O" 2>/dev/null; }
+veille="FROM ${T}posts p JOIN ${T}term_relationships r ON r.object_id=p.ID JOIN ${T}term_taxonomy x ON x.term_taxonomy_id=r.term_taxonomy_id
+        JOIN ${T}terms t ON t.term_id=x.term_id WHERE p.post_type='post' AND p.post_status='publish' AND x.taxonomy='category' AND t.slug='veille'"
+
+# ---------- contrôles ----------
+c_installed() { [ -n "$(opt siteurl)" ]; }
+c_site()      { c_installed && [ "$(code /portfolio/)" = 200 ]; }
+
+c_domain()    { [ -n "$(val domaine)" ]; }
+c_theme()     { [ -n "$(val theme)" ]; }
+c_keywords()  { [ "$(raw mots_cles | tr ',;' '\n\n' | grep -c '[[:alnum:]]')" -ge 3 ]; }
+
+c_query()     { local q n=0; q="$(raw requete)"; [ -n "$q" ] || return 1
+                echo "$q" | grep -q '"[^"]\+"' && n=$((n + 1))
+                echo "$q" | grep -qE '(^| )-[^ ]' && n=$((n + 1))
+                echo "$q" | grep -qi 'site:' && n=$((n + 1))
+                echo "$q" | grep -q ' OR ' && n=$((n + 1))
+                echo "$q" | grep -qi 'filetype:' && n=$((n + 1))
+                [ "$n" -ge 2 ]; }
+
+c_cat()       { num "SELECT COUNT(*) FROM ${T}terms t JOIN ${T}term_taxonomy x ON x.term_id=t.term_id WHERE x.taxonomy='category' AND t.slug='veille'" 1; }
+c_feed()      { web /portfolio/feed/ | grep -q '<rss'; }
+c_generator() { local v; v="$(sed -nE "s/^\\\$wp_version = '([^']+)';.*/\1/p" "$W/wp-includes/version.php" 2>/dev/null)"
+                [ -n "$v" ] && [ "$(val generateur_flux)" = "https://wordpress.org/?v=$v" ]; }
+
+c_reader()    { [ -n "$(val lecteur)" ]; }
+
+c_opml()      { opml >/dev/null; }
+c_feeds()     { local n; n="$(opml)" && [ "${n% *}" -ge 6 ]; }
+c_folders()   { local n; n="$(opml)" && [ "${n#* }" -ge 2 ]; }
+c_cert()      { grep -qiE 'xmlUrl="https?://(www\.)?cert\.(ssi|cyber)\.gouv\.fr' "$O" 2>/dev/null; }
+c_opmlown()   { [ "$(stat -c %U "$O" 2>/dev/null)" = "$U" ]; }
+
+c_page()      { [ -n "$(page)" ]; }
+c_subject()   { local c; c="$(page)"; echo "$c" | grep -q 'Domaine' && ! echo "$c" | grep -qE '\((ton domaine|ton thème|tes mots-clés|une ou deux phrases)'; }
+c_sources()   { [ "$(rows 1)" -ge 7 ] && ! table 1 | grep -qE '\((nom de la source|type|adresse du flux|intérêt|ce qu.elle)'; }
+c_strategy()  { local c; c="$(page)"; echo "$c" | grep -q 'wp:list' && ! echo "$c" | grep -qE '\((son nom|tes flux|tes recherches|quand tu lis|tes dossiers)'; }
+c_menu()      { web /portfolio/ | grep -q '/portfolio/ma-veille/'; }
+
+c_synth()     { [ "$(rows 2)" -ge 6 ]; }
+c_scored()    { [ "$(rows 2)" -ge 6 ] && ! table 2 | grep -qE '\((titre|site, auteur|date|une phrase|1 à 3|total)'; }
+c_rss()       { page | grep -q 'wp:rss'; }
+c_rssok()     { web /portfolio/ma-veille/ | grep -q 'wp-block-rss__item'; }
+
+c_note()      { num "SELECT COUNT(*) $veille" 1; }
+c_link()      { local h; h="$(host)"; sql "SELECT p.post_content $veille" | grep -oE 'href="https?://[^"]+"' | grep -vq "//$h[/:\"]"; }
+c_catfeed()   { web /portfolio/category/veille/feed/ | grep -q '<item>'; }
+
+
+# ---------- missions ----------
+title "Mon radar · ap06 · compte $U"
+
+if run 1; then
+  mission "Mission 1 : reprendre la main"
+  check "Apache tourne toujours" systemctl is-active -q apache2
+  hint "sudo systemctl start apache2"
+  check "MariaDB tourne toujours" systemctl is-active -q mariadb
+  hint "sudo systemctl start mariadb"
+  check "ton portfolio de l'ap05 répond" c_site
+  hint "ouvre http://<IP de ta VM>/portfolio/ : si rien ne s'affiche, relance sudo ~/ap-sio1/ap05/check"
+fi
+
+if run 2; then
+  mission "Mission 2 : choisir sa cible"
+  check "rapport : domaine" c_domain
+  hint "echo \"domaine=…\" >> ~/rapport-ap06.txt"
+  check "rapport : theme" c_theme
+  hint "echo \"theme=…\" >> ~/rapport-ap06.txt (sans accent sur le mot theme)"
+  check "rapport : mots_cles (3 au moins, séparés par des virgules)" c_keywords
+  hint "echo \"mots_cles=WordPress, faille, extension, CVE\" >> ~/rapport-ap06.txt"
+fi
+
+if run 3; then
+  mission "Mission 3 : chercher comme un pro"
+  check "rapport : requete, avec 2 opérateurs au moins" c_query
+  hint "opérateurs : \"expression exacte\", -mot, site:, OR, filetype: (ex. \"WordPress\" faille -tutoriel site:fr)"
+fi
+
+if run 4; then
+  mission "Mission 4 : le flux de ton portfolio"
+  check "la catégorie Veille existe" c_cat
+  hint "tableau de bord : Articles › Catégories, nom Veille"
+  check "ton portfolio publie son flux (/portfolio/feed/)" c_feed
+  check "rapport : generateur_flux" c_generator
+  hint "la valeur de la balise <generator> du flux, recopiée telle quelle (elle commence par https://)"
+fi
+
+if run 5; then
+  mission "Mission 5 : mon lecteur"
+  check "rapport : lecteur" c_reader
+  hint "echo \"lecteur=…\" >> ~/rapport-ap06.txt (Inoreader, Feedly, Thunderbird…)"
+fi
+
+if run 6; then
+  mission "Mission 6 : s'abonner"
+  check "~/abonnements.opml est arrivé, et c'est un OPML lisible" c_opml
+  hint "exporte tes abonnements en OPML, puis depuis ton poste : scp <fichier exporté> $U@<IP de ta VM>:abonnements.opml"
+  check "6 flux au moins dans tes abonnements" c_feeds
+  hint "abonne-toi à d'autres flux, puis exporte et copie à nouveau l'OPML"
+  check "2 dossiers au moins (tes flux sont rangés)" c_folders
+  hint "range tes flux dans des dossiers (catégories) de ton lecteur, puis exporte à nouveau"
+  check "une autorité parmi tes sources : le CERT-FR" c_cert
+  hint "https://www.cert.cyber.gouv.fr/alerte/feed/ (les alertes) ou /avis/feed/ (les avis)"
+  check "abonnements.opml est à ton compte" c_opmlown
+  hint "copie-le avec ton compte (scp), pas avec sudo"
+fi
+
+if run 7; then
+  mission "Mission 7 : ma veille dans le portfolio"
+  check "page « Ma veille » publiée" c_page
+  hint "Pages › Ajouter une page, titre exact : Ma veille ; puis Publier"
+  check "ton sujet : domaine, thème, mots-clés complétés" c_subject
+  hint "colle pages/ma-veille.txt (Raw) avec Ctrl+Maj+V, puis remplace chaque texte entre parenthèses"
+  check "tes sources : un tableau de 6 lignes au moins, complété" c_sources
+  hint "une ligne par source : nom, type, adresse du flux, intérêt"
+  check "ta stratégie de collecte : une liste complétée" c_strategy
+  check "le site montre « Ma veille » (lien dans le menu)" c_menu
+  hint "si ton thème impose son menu, ajoute la page dans Apparence › Éditeur"
+fi
+
+if run 8; then
+  mission "Mission 8 : trier et noter"
+  check "un tableau de synthèse de 5 articles au moins" c_synth
+  hint "le second tableau de la page : une ligne par article lu"
+  check "les 5 articles sont notés (pertinence, actualité, fiabilité, note /9)" c_scored
+  hint "remplace chaque texte entre parenthèses du tableau, notes comprises"
+  check "un bloc RSS sur la page" c_rss
+  hint "dans la page : /rss, bloc RSS, adresse du flux d'une de tes sources"
+  check "le bloc RSS affiche des articles" c_rssok
+  hint "adresse du flux à revérifier (elle s'ouvre dans le navigateur ?)"
+fi
+
+if run 9; then
+  mission "Mission 9 : ma première note de veille"
+  check "un article publié dans la catégorie Veille" c_note
+  hint "panneau Article › Catégories : coche Veille, décoche Non classé ; puis Publier"
+  check "il cite sa source par un lien vers un autre site" c_link
+  hint "sélectionne le nom de ta source, Ctrl+K, colle l'adresse de l'article d'origine"
+  check "le flux de la catégorie Veille contient ta note" c_catfeed
+  hint "http://<IP de ta VM>/portfolio/category/veille/feed/"
+fi
+
+if [ -n "$ONLY" ]; then finish "Mission $ONLY validée : passe à la suivante."; fi
+finish "Toutes les missions sont validées : exit 0. Appelle le professeur."
